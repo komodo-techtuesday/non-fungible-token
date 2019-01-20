@@ -1,0 +1,109 @@
+Using docker for this example, we will create a real blockchain that can be expanded on the public internet.  We will create two docker containers.  Each container will have a common zcash-params directory shared from our workstation.  Each container will have their own data dir saving their own blocks and a config file.  We will make it generic and therefore re-used between the two containers.  The two containers will connect to each other on their own segregated docker network which we will also create.
+==Docker MYNFT Example Blockchain & non-fungible token creation==
+===Network===
+Create
+<pre>
+docker network create myNFTnetwork
+</pre>
+Get network info
+<pre>
+docker network inspect myNFTnetwork | jq -r '.[].IPAM.Config[].Subnet'
+</pre>
+The output to this is your new network address.  If this is the first time you're using docker on this machine, it is likely to be 172.18.0.0/16.
+
+===Config File===
+Using a text editor paste this into a file anywhere on your machine called MYNFT.conf (note: if your docker network address in the previous step was not 172.18.0.0/16, substitute where applicable, e.g. 172.22.0.0/16 was your output, replace all 18 with 22)
+<pre>
+rpcuser=user
+rpcpassword=pass
+bind=0.0.0.0
+rpcbind=127.0.0.1
+rpcbind=172.18.0.2
+rpcbind=172.18.0.3
+rpcbind=172.18.0.4
+#rpcbind=xx.xx.xx.xx
+rpcallowip=172.18.0.0/16
+rpcport=7555
+#regtest=1
+txindex=1
+</pre>
+
+===Blockchain data===
+Let's create two volumes, one for each container using a naming convention of myNFT_nodeX
+<pre>
+docker volume create myNFT_node1
+docker volume create myNFT_node2
+</pre>
+Using some of docker's best practices, let's mount these volumes using busybox one at a time and copy our config file to them.
+<pre>
+docker run -v myNFT_node1:/data --name helper busybox
+docker cp MYNFT.conf helper:/data
+docker rm helper
+docker run -v myNFT_node2:/data --name helper busybox
+docker cp MYNFT.conf helper:/data
+docker rm helper
+</pre>
+The blockchain's data directory is now ready with only the config file in it for now.
+===Start Containers===
+Open two terminals to make your life easier.
+Because we are only testing, we're running docker interactively - if you exit the terminals, you stop the container.
+====Node 1====
+Start the container mounting your hosts zcash-params read-only, mounting node1's datadir.
+<pre>
+docker run -it -v /home/mylo/.zcash-params:/home/user/.zcash-params:ro -v myNFT_node1:/home/user/.komodo/MYNFT -e LOCAL_USER_ID=${UID} --net myNFTnetwork --name mynft_1  imylomylo/komodo
+</pre>
+
+====Node 2====
+Start the container mounting your hosts zcash-params read-only, mounting node2's datadir.
+<pre>
+docker run -it -v /home/mylo/.zcash-params:/home/user/.zcash-params:ro -v myNFT_node2:/home/user/.komodo/MYNFT -e LOCAL_USER_ID=${UID} --net myNFTnetwork --name mynft_2  imylomylo/komodo
+</pre>
+
+===Create New Blockchain===
+====Pubkey for using cryptoconditions====
+From one of your nodes, it doesn't matter which container, we need to get a pubkey to use on our blockchain.   The easiest way to do it is to temporarily run komodo in regtest mode (developer node).  The only minimum requirement is a blank configuration file.
+<pre>
+touch ~/.komodo/komodo.conf
+</pre>
+Now we can start komodod in regtest mode
+<pre>
+komodod -regtest &
+</pre>
+Waiting a few seconds we can then get a new address, it's private key and validate it to get it's pubkey.  Copy/Paste these into your notes so you can re-use them for other testing.  (Note: Never disclose your privkey of an address that has funds to it to anyone - not other developers or support staff)
+<pre>
+komodo-cli -regtest getnewaddress
+RSar2Y5psyTdSH1D8JYqMJMfhGwY7bQ2ta
+
+komodo-cli -regtest dumpprivkey RSar2Y5psyTdSH1D8JYqMJMfhGwY7bQ2ta
+Uwm5Qxxxxxxxxxxxxxxxxxxxxxxxxxx  
+
+komodo-cli -regtest validateaddress RSar2Y5psyTdSH1D8JYqMJMfhGwY7bQ2ta
+{
+  "isvalid": true,
+  "address": "RSar2Y5psyTdSH1D8JYqMJMfhGwY7bQ2ta",
+  "scriptPubKey": "76a914bdd0e339981754e77998fb8d5450627bfd30501c88ac",
+  "segid": 6,
+  "ismine": true,
+  "iswatchonly": false,
+  "isscript": false,
+  "pubkey": "021649dcbc0e8a9b9c98be8bf4afa850c2839ebbf72f0bdecdd350a341f0c17b8a",
+  "iscompressed": true,
+  "account": ""
+}
+
+</pre>
+
+There is no need to keep komodod running in regtest mode anymore so let's stop it.
+<pre>
+komodo-cli -regtest stop
+Komodo server stopping
+</pre>
+
+====Node 1====
+
+
+====Node 2====
+
+
+[[Category:Docker]]
+[[Category:Komodo]]
